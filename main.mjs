@@ -3,10 +3,9 @@ import readStream from './readStream.mjs'
 import Queue from './Queue.mjs'
 
 class Message {
-  constructor(author, text) {
+  constructor(text) {
     this.id = lastid++
     this.buffer = Buffer.from(`id:${this.id}\ndata:${JSON.stringify({
-      author,
       time: new Date().toISOString(),
       text: text.replace(/\s+/g, ' ')
     })}\n\n`)
@@ -19,8 +18,9 @@ const esHeaders = {
   'Connection': 'keep-alive'
 }
 let lastid = 1
+
 const clients = new Set() // this is where we store the open response streams
-const messages = new Queue(new Message('server', 'Hello world!'))
+const messages = new Queue()
 
 const server = http.createServer((req, res) => {
   if (req.headers.origin) res.setHeader('Access-Control-Allow-Origin', req.headers.origin)
@@ -37,15 +37,11 @@ const server = http.createServer((req, res) => {
       case 'OPTIONS': break
       case 'GET':
       res.writeHead(200, esHeaders)
-      const connectedEvent = Buffer.from(`event:join\ndata:${remoteAddr(req)}\n\n`)
-      for (const client of clients) client.write(connectedEvent)
       clients.add(res)
       const lastEventId = req.headers['Last-Event-ID']
       for (const message of messages.valuesAfterID(lastEventId)) res.write(message.buffer)
       req.socket.addListener('close', () => {
         clients.delete(res)
-        const disconnectedEvent = Buffer.from(`event:quit\ndata:${remoteAddr(req)}\n\n`)
-        for (const client of clients) client.write(disconnectedEvent)  
       })
       return
       default: res.writeHead(405)
@@ -62,7 +58,7 @@ const server = http.createServer((req, res) => {
         clearTimeout(keepaliveTimer)
         res.writeHead(204)
         res.end()
-        const message = new Message(remoteAddr(req), buffer.toString())
+        const message = new Message(buffer.toString())
         messages.push(message)
         if (messages.length > 1000) messages.shift()
         for (const client of clients) client.write(message.buffer)
@@ -88,7 +84,3 @@ function keepalive() {
   keepaliveTimer = setTimeout(keepalive, 3e4)
 }
 let keepaliveTimer = setTimeout(keepalive, 3e4)
-
-function remoteAddr(req) {
-  return req.headers['x-forwarded-for'] || req.connection.remoteAddress
-}

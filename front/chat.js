@@ -27,7 +27,6 @@ source.addEventListener('message', event => {
   const t = p.appendChild(document.createElement('time'))
   t.dateTime = data.time
   t.textContent = new Date(data.time).toLocaleTimeString()
-  p.appendChild(document.createElement('b')).textContent = data.author
   p.appendChild(document.createTextNode(data.text))
 })
 source.addEventListener('join', event => {

@@ -24,6 +24,7 @@ export default class Queue {
   }
   /** _Assuming the queue's items are ordered by an 'id' property_, iterate over items with a higher id only. */
   *valuesAfterID(id) {
+    if (!this._len) return
     if (this._last.value.id === id) return // try last item just in case nothing new was added since requested ID
     if (this._last.value.id - 1 === id) var link = this._last // assuming ordered IDs, this must be the only match
     else for (link = this._first; link && link.value.id <= id; link = link.next); // else go the long way around
