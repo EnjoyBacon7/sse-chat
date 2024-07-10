@@ -24,7 +24,7 @@ let lastid = 1
 
 const clients = new Set() // this is where we store the open response streams
 const messages = new Queue()
-const chatHistoryFile = './data/messages.txt'
+const chatHistoryFile = '/data/messages.txt'
 
 // Function to load chat history from file
 function loadChatHistory(filePath) {
