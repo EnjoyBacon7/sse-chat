@@ -1,13 +1,16 @@
 import http from 'http'
+import fs from 'fs'
 import readStream from './readStream.mjs'
 import Queue from './Queue.mjs'
 
 class Message {
   constructor(text) {
     this.id = lastid++
+    this.time = new Date().toISOString()
+    this.text = text.replace(/\s+/g, ' ')
     this.buffer = Buffer.from(`id:${this.id}\ndata:${JSON.stringify({
-      time: new Date().toISOString(),
-      text: text.replace(/\s+/g, ' ')
+      time: this.time,
+      text: this.text
     })}\n\n`)
   }
 }
@@ -21,6 +24,34 @@ let lastid = 1
 
 const clients = new Set() // this is where we store the open response streams
 const messages = new Queue()
+const chatHistoryFile = '/data/messages.txt'
+
+// Function to load chat history from file
+function loadChatHistory(filePath) {
+  if (!fs.existsSync(filePath)) return
+  const data = fs.readFileSync(filePath, 'utf8')
+  const lines = data.split('\n').filter(line => line.trim())
+  for (const line of lines) {
+    const { time, text } = JSON.parse(line)
+    const message = new Message(text)
+    message.time = time // Restore the original time
+    message.buffer = Buffer.from(`id:${message.id}\ndata:${JSON.stringify({
+      time: message.time,
+      text: message.text
+    })}\n\n`)
+    messages.push(message)
+    if (messages.length > 1000) messages.shift()
+  }
+}
+
+// Function to append a message to the chat history file
+function appendToChatHistory(filePath, message) {
+  const logEntry = JSON.stringify({ time: message.time, text: message.text })
+  fs.appendFileSync(filePath, logEntry + '\n', 'utf8')
+}
+
+// Load chat history on startup
+loadChatHistory(chatHistoryFile)
 
 const server = http.createServer((req, res) => {
   if (req.headers.origin) res.setHeader('Access-Control-Allow-Origin', req.headers.origin)
@@ -55,14 +86,14 @@ const server = http.createServer((req, res) => {
       case 'POST':
       readStream(req, 4095)
       .then(buffer => {
-        clearTimeout(keepaliveTimer)
-        res.writeHead(204)
-        res.end()
-        const message = new Message(buffer.toString())
+        const messageText = buffer.toString()
+        const message = new Message(messageText)
         messages.push(message)
         if (messages.length > 1000) messages.shift()
+        appendToChatHistory(chatHistoryFile, message)
         for (const client of clients) client.write(message.buffer)
-        keepaliveTimer = setTimeout(keepalive, 3e4)
+        res.writeHead(204)
+        res.end()
       })
       .catch(err => {
         res.writeHead(400)
